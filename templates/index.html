@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog to YouTube Script Generator</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Blog to YouTube Script Generator</h1>
+        
+        <div class="form-section">
+            <div class="form-group">
+                <label>Blog URLs:</label>
+                <div class="url-list" id="urlList">
+                    <div class="url-item">
+                        <input type="text" class="blog-url" placeholder="Enter blog URL">
+                        <button class="btn btn-remove" onclick="removeUrl(this)">Remove</button>
+                    </div>
+                </div>
+                <button class="btn btn-add" onclick="addUrl()">Add URL</button>
+            </div>
+
+            <div class="form-group">
+                <label>Number of Speakers:</label>
+                <input type="number" id="speakerCount" min="1" max="4" value="1" onchange="updateSpeakerForms()">
+            </div>
+
+            <div id="speakerForms"></div>
+            <div class="form-group">
+                <label>Video Duration (minutes):</label>
+                <input type="number" id="duration" min="1" max="60" value="10" class="duration-input">
+                <div class="duration-info">
+                    <small>Recommended: 5-30 minutes for optimal engagement</small>
+                </div>
+            </div>
+
+            <button class="btn" onclick="generateScript()">Generate Script</button>
+        </div>
+
+        <div class="results-section" id="results">
+            <!-- Generated scripts will appear here -->
+        </div>
+    </div>
+
+    <script>
+        console.log("Hello from the client side!");
+        function addUrl() {
+            const urlItem = `
+                <div class="url-item">
+                    <input type="text" class="blog-url" placeholder="Enter blog URL">
+                    <button class="btn btn-remove" onclick="removeUrl(this)">Remove</button>
+                </div>
+            `;
+            $("#urlList").append(urlItem);
+        }
+
+        function removeUrl(button) {
+            $(button).parent().remove();
+        }
+
+        function updateSpeakerForms() {
+            const count = $("#speakerCount").val();
+            const container = $("#speakerForms");
+            container.empty();
+
+            for (let i = 0; i < count; i++) {
+                const speakerForm = `
+                    <div class="speaker-card">
+                        <h3>Speaker ${i + 1}</h3>
+                        <div class="form-group">
+                            <label>Name:</label>
+                            <input type="text" class="speaker-name" placeholder="Enter speaker name">
+                        </div>
+                        <div class="form-group">
+                            <label>Role:</label>
+                            <select class="speaker-role">
+                                <option value="Main Host">Main Host</option>
+                                <option value="Co-Host">Co-Host</option>
+                                <option value="Expert Guest">Expert Guest</option>
+                                <option value="Industry Specialist">Industry Specialist</option>
+                                <option value="Technical Expert">Technical Expert</option>
+                                <option value="Interviewer">Interviewer</option>
+                                <option value="Commentator">Commentator</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Background:</label>
+                            <input type="text" class="speaker-background" placeholder="Enter speaker background">
+                        </div>
+                        <div class="form-group">
+                            <label>Style:</label>
+                            <select class="speaker-style">
+                                <option value="casual">Casual</option>
+                                <option value="formal">Formal</option>
+                                <option value="technical">Technical</option>
+                            </select>
+                        </div>
+                    </div>
+                `;
+                container.append(speakerForm);
+            }
+        }
+        function formatScript(script) {
+            // Split the script into lines
+            const lines = script.split('\n');
+            let formattedHtml = '';
+            
+            lines.forEach(line => {
+                if (line.trim()) {
+                    if (line.match(/^\[[\d:]+\]/)) {
+                        // Timestamp line
+                        formattedHtml += `<div class="timestamp">${line}</div>`;
+                    } else if (line.match(/^\*\*.+:\*\*/)) {
+                        // Speaker line
+                        const [speaker, ...dialogParts] = line.split(':');
+                        const dialog = dialogParts.join(':').trim();
+                        const speakerName = speaker.replace(/\*\*/g, '').trim();
+                        const role = speakerName.match(/\(([^)]+)\)/);
+                        
+                        formattedHtml += `<div class="script-line">
+                            <span class="speaker-name">${speakerName}</span>
+                            <span class="dialog-text">${dialog}</span>
+                        </div>`;
+                    } else {
+                        // Regular line
+                        formattedHtml += `<div class="script-line">${line}</div>`;
+                    }
+                } else {
+                    formattedHtml += '<br>';
+                }
+            });
+            
+            return formattedHtml;
+        }
+        
+
+        function generateScript() {
+            const urls = $(".blog-url").map(function() {
+                return $(this).val();
+            }).get();
+
+            const speakers = [];
+            $(".speaker-card").each(function() {
+                speakers.push({
+                    name: $(this).find(".speaker-name").val(),
+                    role: $(this).find(".speaker-role").val(),
+                    background: $(this).find(".speaker-background").val(),
+                    style: $(this).find(".speaker-style").val()
+                });
+            });
+
+            const duration_minutes = parseInt($("#duration").val());
+
+            const data = {
+                urls: urls,
+                speakers: speakers,
+                duration_minutes: duration_minutes
+            };
+
+            $("#results").html('<div class="loading">Generating script... Please wait.</div>');
+
+            $.ajax({
+                url: "/generate",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify(data),
+                success: function(response) {
+                    let resultsHtml = "";
+                    response.forEach(script => {
+                        resultsHtml += `
+                            <div class="script-container">
+                                <h2>${script.title}</h2>
+                                <p><strong>URL:</strong> ${script.url}</p>
+                                <p><strong>Target Duration:</strong> ${duration_minutes} minutes</p>
+                                ${script.error ? 
+                                    `<div class="error">${script.error}</div>` :
+                                    `<div class="script-content">${formatScript(script.content)}</div>`
+                                }
+                            </div>
+                        `;
+                    });
+                    $("#results").html(resultsHtml);
+                },
+                error: function(xhr, status, error) {
+                    $("#results").html(`
+                        <div class="error">
+                            An error occurred: ${error}
+                        </div>
+                    `);
+                }
+            });
+        }
+
+        // Initialize the form
+        $(document).ready(function() {
+            updateSpeakerForms();
+        });
+    </script>
+</body>
+</html>
